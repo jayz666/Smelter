@@ -20,7 +20,44 @@ document.addEventListener('DOMContentLoaded', function() {
     
     document.addEventListener('mousemove', drag);
     document.addEventListener('mouseup', stopDrag);
+    
+    // Initialize tab functionality
+    initializeTabs();
 });
+
+function initializeTabs() {
+    const timeTab = document.getElementById('timeTab');
+    const fuelTab = document.getElementById('fuelTab');
+    const timePanel = document.getElementById('timeSkillsPanel');
+    const fuelPanel = document.getElementById('fuelSkillsPanel');
+    
+    if (timeTab && fuelTab && timePanel && fuelPanel) {
+        timeTab.addEventListener('click', () => switchTab('time'));
+        fuelTab.addEventListener('click', () => switchTab('fuel'));
+    }
+}
+
+function switchTab(tab) {
+    const timeTab = document.getElementById('timeTab');
+    const fuelTab = document.getElementById('fuelTab');
+    const timePanel = document.getElementById('timeSkillsPanel');
+    const fuelPanel = document.getElementById('fuelSkillsPanel');
+    
+    // Remove active classes
+    timeTab.classList.remove('active');
+    fuelTab.classList.remove('active');
+    timePanel.classList.remove('active');
+    fuelPanel.classList.remove('active');
+    
+    // Add active classes based on selected tab
+    if (tab === 'time') {
+        timeTab.classList.add('active');
+        timePanel.classList.add('active');
+    } else {
+        fuelTab.classList.add('active');
+        fuelPanel.classList.add('active');
+    }
+}
 
 function startDrag(e) {
     const container = document.getElementById('smelterUI');
@@ -147,29 +184,72 @@ function getProgress(xp, prev, next) {
 function updateSkills(skills) {
   if (!skills) return;
 
-  const levelEl = document.getElementById('skillLevel');
-  const xpEl = document.getElementById('skillXpText');
-  const barEl = document.getElementById('xpProgress');
+  // Update Time Skills Panel
+  const timeLevelEl = document.getElementById('skillLevel');
+  const timeXpEl = document.getElementById('skillXpText');
+  const timeBarEl = document.getElementById('xpProgress');
+  const timeEfficiencyEl = document.getElementById('skillEfficiency');
 
-  if (!levelEl || !xpEl || !barEl) return;
+  if (timeLevelEl && timeXpEl && timeBarEl && timeEfficiencyEl) {
+    const xp = skills.xp ?? 0;
+    const level = skills.level ?? 1;
+    const prev = skills.prevLevelXp ?? 0;
+    const next = skills.nextLevelXp ?? prev;
 
-  const xp = skills.xp ?? 0;
-  const level = skills.level ?? 1;
-  const prev = skills.prevLevelXp ?? 0;
-  const next = skills.nextLevelXp ?? prev;
+    timeLevelEl.textContent = `Level ${level}`;
+    timeEfficiencyEl.textContent = `${Math.round((level - 1) * 3)}% faster processing`;
 
-  levelEl.textContent = `Level ${level}`;
-
-  if (next <= prev) {
-    xpEl.textContent = `${xp} XP (MAX)`;
-    barEl.style.width = `100%`;
-  } else {
-    xpEl.textContent = `${xp} XP / ${next} XP`;
-    const progress = getProgress(xp, prev, next);
-    barEl.style.width = `${progress}%`;
+    if (next <= prev) {
+      timeXpEl.textContent = `${xp} XP (MAX)`;
+      timeBarEl.style.width = `100%`;
+    } else {
+      timeXpEl.textContent = `${xp} XP / ${next} XP`;
+      const progress = getProgress(xp, prev, next);
+      timeBarEl.style.width = `${progress}%`;
+    }
   }
 
-  // Optional one-line stats (if you add the element)
+  // Update Fuel Skills Panel
+  const fuelLevelEl = document.getElementById('fuelSkillLevel');
+  const fuelXpEl = document.getElementById('fuelSkillXpText');
+  const fuelBarEl = document.getElementById('fuelXpProgress');
+  const fuelEfficiencyEl = document.getElementById('fuelSkillEfficiency');
+  const fuelUnlockEl = document.getElementById('fuelUnlockStatus');
+
+  if (fuelLevelEl && fuelXpEl && fuelBarEl && fuelEfficiencyEl && fuelUnlockEl) {
+    const fuelXp = skills.fuel_xp ?? 0;
+    const fuelLevel = skills.fuel_level ?? 0;
+    const fuelPrev = skills.fuel_prevLevelXp ?? 0;
+    const fuelNext = skills.fuel_nextLevelXp ?? fuelPrev;
+
+    fuelLevelEl.textContent = fuelLevel === 0 ? 'Locked' : `Level ${fuelLevel}`;
+    
+    if (fuelLevel === 0) {
+      fuelEfficiencyEl.textContent = '0% less fuel';
+      fuelXpEl.textContent = '0 XP / 50 XP';
+      fuelBarEl.style.width = `0%`;
+      fuelUnlockEl.textContent = 'Unlocks at Time Level 5';
+      fuelUnlockEl.style.color = 'rgba(255,255,255,0.5)';
+    } else {
+      const efficiency = Math.round((fuelLevel - 1) * 3);
+      fuelEfficiencyEl.textContent = `${efficiency}% less fuel`;
+      
+      if (fuelNext <= fuelPrev) {
+        fuelXpEl.textContent = `${fuelXp} XP (MAX)`;
+        fuelBarEl.style.width = `100%`;
+        fuelUnlockEl.textContent = 'Maximum efficiency reached';
+        fuelUnlockEl.style.color = 'rgba(255,107,53,0.8)';
+      } else {
+        fuelXpEl.textContent = `${fuelXp} XP / ${fuelNext} XP`;
+        const progress = getProgress(fuelXp, fuelPrev, fuelNext);
+        fuelBarEl.style.width = `${progress}%`;
+        fuelUnlockEl.textContent = 'Keep smelting to progress';
+        fuelUnlockEl.style.color = 'rgba(255,255,255,0.7)';
+      }
+    }
+  }
+
+  // Optional stats line (if you add the element)
   const statsEl = document.getElementById('skillStats');
   if (statsEl) {
     statsEl.textContent =

@@ -36,6 +36,33 @@ local function getLevelAndThresholdsFromXP(xp)
     return level, prev, next
 end
 
+-- Fuel efficiency curve (unlocks at time level 5, max level 5)
+local function getFuelLevelAndThresholdsFromXP(fuelXp, timeLevel)
+    fuelXp = math.floor(tonumber(fuelXp) or 0)
+    if fuelXp < 0 then fuelXp = 0 end
+
+    -- Fuel efficiency unlocks at time level 5
+    if timeLevel < 5 then
+        return 0, 0, 0 -- Locked
+    end
+
+    local level = 1
+    local prev = 0
+    local next = 50
+
+    while level < 5 and fuelXp >= next do
+        level = level + 1
+        prev = next
+        next = prev + (30 * level)
+    end
+
+    if level >= 5 then
+        next = prev -- max level sentinel
+    end
+
+    return level, prev, next
+end
+
 local function loadSkills(license, cb)
     if skillsCache[license] then
         cb(skillsCache[license])
@@ -43,7 +70,7 @@ local function loadSkills(license, cb)
     end
 
     exports.oxmysql:query(
-        "SELECT license, xp, total_items_smelted, total_fuel_used, total_jobs_completed FROM smelter_skills WHERE license = ? LIMIT 1",
+        "SELECT license, xp, fuel_xp, total_items_smelted, total_fuel_used, total_jobs_completed FROM smelter_skills WHERE license = ? LIMIT 1",
         { license },
         function(rows)
             local row = rows and rows[1]
@@ -51,6 +78,7 @@ local function loadSkills(license, cb)
                 row = {
                     license = license,
                     xp = 0,
+                    fuel_xp = 0,
                     total_items_smelted = 0,
                     total_fuel_used = 0,
                     total_jobs_completed = 0
@@ -63,39 +91,44 @@ local function loadSkills(license, cb)
     )
 end
 
-local function upsertSkills(license, xpAdd, itemsAdd, fuelAdd, jobsAdd, cb)
-    xpAdd = math.floor(tonumber(xpAdd) or 0)
+local function upsertSkills(license, timeXpAdd, fuelXpAdd, itemsAdd, fuelAdd, jobsAdd, cb)
+    timeXpAdd = math.floor(tonumber(timeXpAdd) or 0)
+    fuelXpAdd = math.floor(tonumber(fuelXpAdd) or 0)
     itemsAdd = math.floor(tonumber(itemsAdd) or 0)
     fuelAdd = math.floor(tonumber(fuelAdd) or 0)
     jobsAdd = math.floor(tonumber(jobsAdd) or 0)
 
-    if xpAdd < 0 then xpAdd = 0 end
+    if timeXpAdd < 0 then timeXpAdd = 0 end
+    if fuelXpAdd < 0 then fuelXpAdd = 0 end
     if itemsAdd < 0 then itemsAdd = 0 end
     if fuelAdd < 0 then fuelAdd = 0 end
     if jobsAdd < 0 then jobsAdd = 0 end
 
     exports.oxmysql:query(
         [[
-        INSERT INTO smelter_skills (license, xp, total_items_smelted, total_fuel_used, total_jobs_completed)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO smelter_skills (license, xp, fuel_xp, total_items_smelted, total_fuel_used, total_jobs_completed)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
             xp = xp + VALUES(xp),
+            fuel_xp = fuel_xp + VALUES(fuel_xp),
             total_items_smelted = total_items_smelted + VALUES(total_items_smelted),
             total_fuel_used = total_fuel_used + VALUES(total_fuel_used),
             total_jobs_completed = total_jobs_completed + VALUES(total_jobs_completed)
         ]],
-        { license, xpAdd, itemsAdd, fuelAdd, jobsAdd },
+        { license, timeXpAdd, fuelXpAdd, itemsAdd, fuelAdd, jobsAdd },
         function()
             -- Update cache locally (no extra SELECT)
             local c = skillsCache[license] or {
                 license = license,
                 xp = 0,
+                fuel_xp = 0,
                 total_items_smelted = 0,
                 total_fuel_used = 0,
                 total_jobs_completed = 0
             }
 
-            c.xp = (c.xp or 0) + xpAdd
+            c.xp = (c.xp or 0) + timeXpAdd
+            c.fuel_xp = (c.fuel_xp or 0) + fuelXpAdd
             c.total_items_smelted = (c.total_items_smelted or 0) + itemsAdd
             c.total_fuel_used = (c.total_fuel_used or 0) + fuelAdd
             c.total_jobs_completed = (c.total_jobs_completed or 0) + jobsAdd
@@ -131,14 +164,30 @@ local function getProcessingTimeSeconds(baseTime, amount, level)
     return math.max(1, math.ceil(total))
 end
 
+local function getFuelEfficiency(fuelLevel)
+    -- 3% per level starting from Level 2, max 15%
+    local reduction = (fuelLevel - 1) * 0.03
+    
+    -- Defensive caps
+    if reduction < 0 then reduction = 0 end
+    if reduction > 0.15 then reduction = 0.15 end
+    
+    return 1 - reduction
+end
+
 local function buildSkillsPayload(row)
-    local level, prev, next = getLevelAndThresholdsFromXP(row.xp or 0)
+    local timeLevel, timePrev, timeNext = getLevelAndThresholdsFromXP(row.xp or 0)
+    local fuelLevel, fuelPrev, fuelNext = getFuelLevelAndThresholdsFromXP(row.fuel_xp or 0, timeLevel)
 
     return {
         xp = row.xp or 0,
-        level = level,
-        prevLevelXp = prev,
-        nextLevelXp = next,
+        level = timeLevel,
+        prevLevelXp = timePrev,
+        nextLevelXp = timeNext,
+        fuel_xp = row.fuel_xp or 0,
+        fuel_level = fuelLevel,
+        fuel_prevLevelXp = fuelPrev,
+        fuel_nextLevelXp = fuelNext,
         total_items_smelted = row.total_items_smelted or 0,
         total_fuel_used = row.total_fuel_used or 0,
         total_jobs_completed = row.total_jobs_completed or 0
@@ -231,16 +280,19 @@ RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
     
     -- IMPORTANT: compute time using skills (server-side)
     loadSkills(license, function(skillRow)
-        local level, _, _ = getLevelAndThresholdsFromXP(skillRow.xp or 0)
+        local timeLevel, _, _ = getLevelAndThresholdsFromXP(skillRow.xp or 0)
+        local fuelLevel, _, _ = getFuelLevelAndThresholdsFromXP(skillRow.fuel_xp or 0, timeLevel)
         
         -- BASE time for fuel (no efficiency)
         local baseTotalTime = recipe.baseTime * amount
         
         -- Skill-adjusted time
-        local totalTime = getProcessingTimeSeconds(recipe.baseTime, amount, level)
+        local totalTime = getProcessingTimeSeconds(recipe.baseTime, amount, timeLevel)
         
-        -- Fuel calculated from BASE time
-        local requiredFuel = math.ceil(baseTotalTime / Config.Fuel.burnTime)
+        -- Fuel calculated with efficiency (if unlocked)
+        local fuelEfficiency = getFuelEfficiency(fuelLevel)
+        local baseRequiredFuel = math.ceil(baseTotalTime / Config.Fuel.burnTime)
+        local requiredFuel = math.max(1, math.ceil(baseRequiredFuel * fuelEfficiency))
         
         -- Check inventory for materials
         local materialCount = ox_inventory:Search(src, 'count', recipe.input)
@@ -340,20 +392,29 @@ RegisterNetEvent('smelter:collectJob', function()
     -- Job finished, give items
     ox_inventory:AddItem(src, recipe.output, job.amount)
     
-    -- after successful AddItem and before final response:
-    local xpGained = math.floor(job.amount * (recipe.baseTime or 0))
-    local fuelUsed = math.floor(job.fuelUsed or 0)
-
-    upsertSkills(license, xpGained, job.amount, fuelUsed, 1, function(updatedRow)
-        -- Clear job
-        activeJobs[license] = nil
-        deleteJobFromDatabase(license)
+    -- Load current skills to check unlock status
+    loadSkills(license, function(skillRow)
+        -- Calculate XP awards
+        local timeXpGained = math.floor(job.amount * (recipe.baseTime or 0))
+        local fuelXpGained = math.floor(job.fuelUsed * 10) -- Linear fuel XP
         
-        TriggerClientEvent('smelter:jobResponse', src, 'collected', {
-            recipe = job.recipe,
-            amount = job.amount,
-            skills = buildSkillsPayload(updatedRow)
-        })
+        -- Check if fuel efficiency is unlocked (time level >= 5)
+        local timeLevel, _, _ = getLevelAndThresholdsFromXP(skillRow.xp or 0)
+        if timeLevel < 5 then
+            fuelXpGained = 0 -- Fuel XP locked until time level 5
+        end
+
+        upsertSkills(license, timeXpGained, fuelXpGained, job.amount, job.fuelUsed, 1, function(updatedRow)
+            -- Clear job
+            activeJobs[license] = nil
+            deleteJobFromDatabase(license)
+            
+            TriggerClientEvent('smelter:jobResponse', src, 'collected', {
+                recipe = job.recipe,
+                amount = job.amount,
+                skills = buildSkillsPayload(updatedRow)
+            })
+        end)
     end)
 end)
 
