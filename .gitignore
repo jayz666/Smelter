@@ -1,0 +1,19 @@
+# Persistence files
+data/jobs.json
+data/jobs_corrupt_*.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node modules (if any)
+node_modules/
+
+# Logs
+*.log

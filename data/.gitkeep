@@ -1,0 +1,2 @@
+# This file ensures the data directory exists in git
+# The directory will remain empty (persistence files are gitignored)

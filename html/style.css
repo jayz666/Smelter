@@ -1,0 +1,354 @@
+/* CEF-Safe Transparent UI */
+html, body {
+    background: transparent;
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    color: white;
+    overflow: hidden;
+}
+
+/* LEFT FLOATING PANEL */
+.container {
+    position: absolute;
+    left: 40px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 400px;
+
+    background: linear-gradient(
+        180deg,
+        rgba(15,15,15,0.92),
+        rgba(20,20,20,0.88)
+    );
+
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 22px;
+}
+
+/* Header */
+.header {
+    margin-bottom: 20px;
+}
+
+.logo {
+    font-size: 22px;
+    font-weight: bold;
+    color: #ff6b35;
+    letter-spacing: 1px;
+}
+
+.subtitle {
+    font-size: 13px;
+    opacity: 0.6;
+    margin-top: 4px;
+}
+
+/* Sections */
+.section {
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.section-title {
+    font-size: 12px;
+    margin-bottom: 6px;
+    opacity: 0.7;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Recipe Info */
+.recipe-info {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+.recipe-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.input-item {
+    color: #87ceeb;
+}
+
+.output-item {
+    color: #ffd700;
+}
+
+.arrow {
+    opacity: 0.5;
+}
+
+/* Form Elements */
+select, input {
+    width: 100%;
+    padding: 8px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 6px;
+    color: white;
+    outline: none;
+    font-size: 14px;
+}
+
+select:focus, input:focus {
+    border-color: rgba(255,107,53,0.5);
+    background: rgba(255,255,255,0.12);
+}
+
+select option {
+    background: #1a1a1a;
+    color: white;
+}
+
+/* Buttons */
+.btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.primary {
+    background: linear-gradient(
+        135deg,
+        rgba(255,107,53,0.9),
+        rgba(255,140,66,0.75)
+    );
+    border: 1px solid rgba(255,107,53,0.4);
+}
+
+.success {
+    background: linear-gradient(
+        135deg,
+        rgba(0,180,90,0.9),
+        rgba(0,200,120,0.75)
+    );
+    border: 1px solid rgba(0,180,90,0.4);
+}
+
+/* Status */
+.status-section {
+    margin-top: 15px;
+}
+
+.status {
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: center;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06);
+    min-height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Processing */
+.status.processing {
+    background: rgba(255,107,53,0.10);
+    border-color: rgba(255,107,53,0.25);
+}
+
+/* Ready */
+.status.ready {
+    background: rgba(0,180,90,0.12);
+    border-color: rgba(0,180,90,0.30);
+}
+
+/* Error */
+.status.error {
+    background: rgba(220,53,69,0.12);
+    border-color: rgba(220,53,69,0.35);
+    color: #ff6b6b;
+}
+
+.hint {
+    font-size: 12px;
+    margin-top: 6px;
+    opacity: 0.6;
+    color: #ff6b35;
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.recipe-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.item-name {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.item-amount {
+    font-size: 12px;
+    color: #ff6b35;
+    font-weight: bold;
+}
+
+.input-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.input-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 6px;
+}
+
+.input-group label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.9);
+    min-width: 60px;
+}
+
+.input-group select,
+.input-group input {
+    padding: 5px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    color: white;
+    font-size: 14px;
+}
+
+.input-group select {
+    width: 100px;
+}
+
+.input-group input {
+    width: 60px;
+    text-align: center;
+}
+
+.max-text {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.fuel-requirement {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(255, 107, 53, 0.1);
+    border: 1px solid rgba(255, 107, 53, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    margin-top: 5px;
+}
+
+.fuel-label {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.fuel-amount {
+    font-size: 14px;
+    color: #ff6b35;
+    font-weight: bold;
+}
+
+.processing-section, .ready-section, .error-section {
+    display: flex;
+    justify-content: center;
+}
+
+.processing-info, .ready-info {
+    text-align: center;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 15px;
+    border-radius: 6px;
+    min-width: 250px;
+}
+
+.processing-text, .ready-text {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.9);
+    margin-bottom: 10px;
+}
+
+.time-remaining {
+    font-size: 14px;
+    color: #ff6b35;
+    font-weight: bold;
+}
+
+.error-section .error-message {
+    background: rgba(244, 67, 54, 0.2);
+    border: 1px solid rgba(244, 67, 54, 0.5);
+    padding: 15px;
+    border-radius: 6px;
+    text-align: center;
+    color: #f44336;
+    font-size: 14px;
+}
+
+.button-container {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.start-button, .collect-button {
+    background: linear-gradient(135deg, #ff6b35, #ff8c42);
+    border: none;
+    color: white;
+    padding: 12px 30px;
+    font-size: 16px;
+    font-weight: bold;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.collect-button {
+    background: linear-gradient(135deg, #4CAF50, #66BB6A);
+}
+
+.start-button:hover, .collect-button:hover {
+    transform: translateY(-1px);
+}
+
+.start-button:disabled, .collect-button:disabled {
+    background: rgba(255, 255, 255, 0.2);
+    cursor: not-allowed;
+    transform: none;
+}

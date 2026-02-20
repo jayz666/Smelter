@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smelter</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">SMELTER</div>
+            <div class="subtitle">Process ores into refined materials</div>
+        </div>
+
+        <!-- Recipe Selection -->
+        <div class="section" id="recipeSection">
+            <div class="section-title">Recipe</div>
+            <select id="recipeSelect">
+                <option value="">Loading...</option>
+            </select>
+            <div class="recipe-info" id="recipeInfo">
+                <div class="recipe-flow">
+                    <span class="input-item" id="inputItemName">-</span>
+                    <span class="arrow">→</span>
+                    <span class="output-item" id="outputItemName">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Amount Input -->
+        <div class="section" id="amountSection">
+            <div class="section-title">Amount</div>
+            <input type="number" id="amountInput" min="1" max="20" value="1" />
+            <div class="hint" id="fuelRequirement">Requires: 0 coal</div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="section" id="buttonSection">
+            <button id="startBtn" class="btn primary">Start Smelting</button>
+            <button id="collectBtn" class="btn success" style="display: none;">Collect</button>
+        </div>
+
+        <!-- Status Display -->
+        <div class="status-section" id="statusSection">
+            <div id="statusBox" class="status"></div>
+        </div>
+
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
