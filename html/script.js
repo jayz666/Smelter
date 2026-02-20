@@ -4,19 +4,104 @@ let availableRecipes = {};
 let fuelConfig = {};
 let maxBatch = 20;
 
+// Drag functionality
+let isDragging = false;
+let dragOffset = { x: 0, y: 0 };
+
+// Initialize drag functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('smelterUI');
+    const header = document.querySelector('.header');
+    
+    if (container && header) {
+        header.style.cursor = 'move';
+        header.addEventListener('mousedown', startDrag);
+    }
+    
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', stopDrag);
+});
+
+function startDrag(e) {
+    const container = document.getElementById('smelterUI');
+    if (!container) return;
+    
+    isDragging = true;
+    dragOffset.x = e.clientX - container.offsetLeft;
+    dragOffset.y = e.clientY - container.offsetTop;
+    
+    // Disable transition during drag
+    container.style.transition = 'none';
+}
+
+function drag(e) {
+    if (!isDragging) return;
+    
+    const container = document.getElementById('smelterUI');
+    if (!container) return;
+    
+    const newX = e.clientX - dragOffset.x;
+    const newY = e.clientY - dragOffset.y;
+    
+    // Keep within viewport bounds
+    const maxX = window.innerWidth - container.offsetWidth;
+    const maxY = window.innerHeight - container.offsetHeight;
+    
+    container.style.left = Math.max(0, Math.min(newX, maxX)) + 'px';
+    container.style.top = Math.max(0, Math.min(newY, maxY)) + 'px';
+    container.style.transform = 'none'; // Remove center transform when dragging
+}
+
+function stopDrag() {
+    if (!isDragging) return;
+    
+    isDragging = false;
+    const container = document.getElementById('smelterUI');
+    if (container) {
+        container.style.transition = ''; // Restore transition
+    }
+}
+
 // Message listener
 window.addEventListener('message', function(event) {
     const data = event.data;
     
     switch (data.action) {
-        case 'showUI':
+        case 'open':
+            availableRecipes = data.data.recipes;
+            fuelConfig = data.data.fuel;
+            maxBatch = data.data.maxBatch;
+
+            const uiElement = document.getElementById('smelterUI');
+            uiElement.style.display = 'block';
             document.body.style.display = 'block';
+
+            // Reset to default position
+            uiElement.style.left = '40px';
+            uiElement.style.top = '50%';
+            uiElement.style.transform = 'translateY(-50%)';
+            uiElement.style.transition = 'transform 0.2s ease';
+
+            populateRecipeDropdown();
+            showIdleState();
+            break;
+            
+        case 'skills':
+            updateSkills(data.data);
+            break;
+            
+        case 'state':
+            if (data.data.mode === 'idle') {
+                showIdleState();
+            } else if (data.data.mode === 'active') {
+                showActiveState(data.data.recipe, data.data.amount, data.data.remaining);
+            } else if (data.data.mode === 'ready') {
+                showReadyState(data.data.recipe, data.data.amount);
+            }
             break;
             
         case 'hideUI':
-            document.body.style.display = 'none';
-            clearInterval(updateInterval);
-            updateInterval = null;
+            document.getElementById('smelterUI').style.display = 'none';
             break;
             
         case 'initRecipes':
@@ -36,11 +121,61 @@ window.addEventListener('message', function(event) {
             populateRecipeDropdown();
             break;
             
-        case 'state':
+        case 'showUI':
+            document.body.style.display = 'block';
+            break;
+            
+        case 'hideUI':
+            document.body.style.display = 'none';
+            clearInterval(updateInterval);
+            updateInterval = null;
             handleStateUpdate(data.data);
             break;
     }
 });
+
+function getProgress(xp, prev, next) {
+  if (typeof xp !== 'number') xp = 0;
+  if (typeof prev !== 'number') prev = 0;
+  if (typeof next !== 'number') next = prev;
+
+  if (next <= prev) return 100; // max level
+  const pct = ((xp - prev) / (next - prev)) * 100;
+  return Math.max(0, Math.min(100, pct));
+}
+
+function updateSkills(skills) {
+  if (!skills) return;
+
+  const levelEl = document.getElementById('skillLevel');
+  const xpEl = document.getElementById('skillXpText');
+  const barEl = document.getElementById('xpProgress');
+
+  if (!levelEl || !xpEl || !barEl) return;
+
+  const xp = skills.xp ?? 0;
+  const level = skills.level ?? 1;
+  const prev = skills.prevLevelXp ?? 0;
+  const next = skills.nextLevelXp ?? prev;
+
+  levelEl.textContent = `Level ${level}`;
+
+  if (next <= prev) {
+    xpEl.textContent = `${xp} XP (MAX)`;
+    barEl.style.width = `100%`;
+  } else {
+    xpEl.textContent = `${xp} XP / ${next} XP`;
+    const progress = getProgress(xp, prev, next);
+    barEl.style.width = `${progress}%`;
+  }
+
+  // Optional one-line stats (if you add the element)
+  const statsEl = document.getElementById('skillStats');
+  if (statsEl) {
+    statsEl.textContent =
+      `Smelted: ${skills.total_items_smelted ?? 0} | Fuel: ${skills.total_fuel_used ?? 0} | Jobs: ${skills.total_jobs_completed ?? 0}`;
+  }
+}
 
 // Recipe management
 function populateRecipeDropdown() {

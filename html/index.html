@@ -7,10 +7,21 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container" id="smelterUI">
         <div class="header">
             <div class="logo">SMELTER</div>
             <div class="subtitle">Process ores into refined materials</div>
+            
+            <div class="skills-header">
+              <div id="skillLevel" class="skill-level">Level 1</div>
+              <div class="xp-bar">
+                <div id="xpProgress" class="xp-progress" style="width: 0%"></div>
+              </div>
+              <div id="skillXpText" class="skill-xp-text">0 XP / 100 XP</div>
+              
+              <!-- Optional stats line -->
+              <div id="skillStats" class="skill-stats" style="display:none;"></div>
+            </div>
         </div>
 
         <!-- Recipe Selection -->

@@ -1,5 +1,5 @@
-local lib = exports.ox_lib
-local target = exports.ox_target
+local ox_lib = exports.ox_lib
+local ox_target = exports.ox_target
 
 local lastInteraction = 0
 local hasActiveJob = false
@@ -8,20 +8,19 @@ local hasActiveJob = false
 local function openSmelterUI()
     if GetGameTimer() - lastInteraction > Config.ClientCooldown then
         lastInteraction = GetGameTimer()
+        
         SetNuiFocus(true, true)
-        
-        -- Send recipe data and fuel config to NUI
         SendNUIMessage({
-            action = 'initRecipes',
-            data = Config.Recipes
+            action = 'open',
+            data = {
+                recipes = Config.Recipes,
+                fuel = Config.Fuel,
+                maxBatch = Config.MaxBatch
+            }
         })
         
-        SendNUIMessage({
-            action = 'initFuel',
-            data = Config.Fuel
-        })
-        
-        SendNUIMessage({action = 'showUI'})
+        -- Request skills from server
+        TriggerServerEvent('smelter:requestSkills')
     end
 end
 
@@ -92,13 +91,25 @@ RegisterNetEvent('smelter:jobResponse', function(status, data)
         })
         exports.ox_lib:notify({description = 'Collected '..data.amount..' '..recipe.label..' ingots!', type = 'success'})
         
+        -- Forward skills data to NUI
+        if data.skills then
+            SendNUIMessage({ action = 'skills', data = data.skills })
+        end
+        
     elseif status == 'error' then
         exports.ox_lib:notify({description = data or 'Unknown error', type = 'error'})
     end
 end)
 
+RegisterNetEvent('smelter:skills', function(skills)
+    SendNUIMessage({
+        action = 'skills',
+        data = skills
+    })
+end)
+
 -- Target Zone
-target:addBoxZone({
+ox_target:addBoxZone({
     coords = vec3(Config.SmelterLocation.x, Config.SmelterLocation.y, Config.SmelterLocation.z),
     size = vec3(1.0, 1.0, 2.0),
     rotation = Config.SmelterLocation.w,

@@ -6,27 +6,27 @@ Config.ClientCooldown = 2000 -- 2 seconds in milliseconds
 
 Config.Fuel = {
     item = "coal",
-    burnTime = 10 -- seconds per fuel item
+    burnTime = 50 -- seconds per fuel item
 }
 
 Config.Recipes = {
     iron = {
         label = "Iron",
         input = "iron_ore",
-        output = "iron_ingot",
-        baseTime = 5
+        output = "iron",
+        baseTime = 50.0
     },
     copper = {
         label = "Copper",
         input = "copper_ore",
-        output = "copper_ingot",
-        baseTime = 6
+        output = "copper",
+        baseTime = 24.0
     },
     gold = {
         label = "Gold",
         input = "gold_ore",
-        output = "gold_ingot",
-        baseTime = 8
+        output = "gold",
+        baseTime = 100.0
     }
 }
 

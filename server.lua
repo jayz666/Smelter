@@ -1,6 +1,7 @@
 local ox_inventory = exports.ox_inventory
 local activeJobs = {}
 local sourceToLicense = {}
+local skillsCache = {} -- [license] = row
 
 -- License extraction utility
 local function getLicense(src)
@@ -10,6 +11,138 @@ local function getLicense(src)
         end
     end
     return nil
+end
+
+-- Level curve:
+-- Next level thresholds: 100, 250, 450, 700, 1000, 1350, 1750, 2200, 2700 (cap 10)
+local function getLevelAndThresholdsFromXP(xp)
+    xp = math.floor(tonumber(xp) or 0)
+    if xp < 0 then xp = 0 end
+
+    local level = 1
+    local prev = 0
+    local next = 100
+
+    while level < 10 and xp >= next do
+        level = level + 1
+        prev = next
+        next = prev + (50 * (level + 1))
+    end
+
+    if level >= 10 then
+        next = prev -- max level sentinel
+    end
+
+    return level, prev, next
+end
+
+local function loadSkills(license, cb)
+    if skillsCache[license] then
+        cb(skillsCache[license])
+        return
+    end
+
+    exports.oxmysql:query(
+        "SELECT license, xp, total_items_smelted, total_fuel_used, total_jobs_completed FROM smelter_skills WHERE license = ? LIMIT 1",
+        { license },
+        function(rows)
+            local row = rows and rows[1]
+            if not row then
+                row = {
+                    license = license,
+                    xp = 0,
+                    total_items_smelted = 0,
+                    total_fuel_used = 0,
+                    total_jobs_completed = 0
+                }
+            end
+
+            skillsCache[license] = row
+            cb(row)
+        end
+    )
+end
+
+local function upsertSkills(license, xpAdd, itemsAdd, fuelAdd, jobsAdd, cb)
+    xpAdd = math.floor(tonumber(xpAdd) or 0)
+    itemsAdd = math.floor(tonumber(itemsAdd) or 0)
+    fuelAdd = math.floor(tonumber(fuelAdd) or 0)
+    jobsAdd = math.floor(tonumber(jobsAdd) or 0)
+
+    if xpAdd < 0 then xpAdd = 0 end
+    if itemsAdd < 0 then itemsAdd = 0 end
+    if fuelAdd < 0 then fuelAdd = 0 end
+    if jobsAdd < 0 then jobsAdd = 0 end
+
+    exports.oxmysql:query(
+        [[
+        INSERT INTO smelter_skills (license, xp, total_items_smelted, total_fuel_used, total_jobs_completed)
+        VALUES (?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            xp = xp + VALUES(xp),
+            total_items_smelted = total_items_smelted + VALUES(total_items_smelted),
+            total_fuel_used = total_fuel_used + VALUES(total_fuel_used),
+            total_jobs_completed = total_jobs_completed + VALUES(total_jobs_completed)
+        ]],
+        { license, xpAdd, itemsAdd, fuelAdd, jobsAdd },
+        function()
+            -- Update cache locally (no extra SELECT)
+            local c = skillsCache[license] or {
+                license = license,
+                xp = 0,
+                total_items_smelted = 0,
+                total_fuel_used = 0,
+                total_jobs_completed = 0
+            }
+
+            c.xp = (c.xp or 0) + xpAdd
+            c.total_items_smelted = (c.total_items_smelted or 0) + itemsAdd
+            c.total_fuel_used = (c.total_fuel_used or 0) + fuelAdd
+            c.total_jobs_completed = (c.total_jobs_completed or 0) + jobsAdd
+
+            skillsCache[license] = c
+
+            if cb then cb(c) end
+        end
+    )
+end
+
+local function getProcessingTimeSeconds(baseTime, amount, level)
+    baseTime = tonumber(baseTime) or 0
+    amount = math.floor(tonumber(amount) or 0)
+
+    if baseTime < 0 then baseTime = 0 end
+    if amount < 1 then amount = 1 end
+
+    local cappedLevel = math.min(math.max(level or 1, 1), 10)
+
+    -- 3% per level starting from Level 2
+    local reduction = (cappedLevel - 1) * 0.03
+    
+    -- Defensive caps prevent future config mistakes
+    if reduction < 0 then reduction = 0 end
+    if reduction > 0.27 then reduction = 0.27 end
+    
+    local efficiency = 1 - reduction
+
+    local total = (baseTime * amount) * efficiency
+
+    -- Always at least 1 second
+    return math.max(1, math.ceil(total))
+end
+
+local function buildSkillsPayload(row)
+    local level, prev, next = getLevelAndThresholdsFromXP(row.xp or 0)
+
+    return {
+        xp = row.xp or 0,
+        level = level,
+        prevLevelXp = prev,
+        nextLevelXp = next,
+        total_items_smelted = row.total_items_smelted or 0,
+        total_fuel_used = row.total_fuel_used or 0,
+        total_jobs_completed = row.total_jobs_completed or 0
+    }
 end
 
 -- Database functions
@@ -52,6 +185,17 @@ AddEventHandler('playerConnecting', function()
     end
 end)
 
+-- Skills request event
+RegisterNetEvent("smelter:requestSkills", function()
+    local src = source
+    local license = getLicense(src)
+    if not license then return end
+
+    loadSkills(license, function(row)
+        TriggerClientEvent("smelter:skills", src, buildSkillsPayload(row))
+    end)
+end)
+
 RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
     local src = source
     
@@ -85,59 +229,69 @@ RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
         return
     end
     
-    -- Calculate required fuel
-    local totalTime = amount * recipe.baseTime
-    local requiredFuel = math.ceil(totalTime / Config.Fuel.burnTime)
-    
-    -- Check inventory for materials
-    local materialCount = ox_inventory:Search(src, 'count', recipe.input)
-    if materialCount < amount then
-        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Not enough '..recipe.label..' ore')
-        return
-    end
-    
-    -- Check inventory for fuel
-    local fuelCount = ox_inventory:Search(src, 'count', Config.Fuel.item)
-    if fuelCount < requiredFuel then
-        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Not enough coal (need '..requiredFuel..')')
-        return
-    end
-    
-    -- Remove materials first
-    local materialRemoved = ox_inventory:RemoveItem(src, recipe.input, amount)
-    if not materialRemoved then
-        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Failed to remove materials')
-        return
-    end
-    
-    -- Remove fuel with rollback
-    local fuelRemoved = ox_inventory:RemoveItem(src, Config.Fuel.item, requiredFuel)
-    if not fuelRemoved then
-        -- Rollback material removal
-        ox_inventory:AddItem(src, recipe.input, amount)
-        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Failed to remove fuel')
-        return
-    end
-    
-    -- Create job
-    local finishTime = os.time() + totalTime
-    local jobData = {
-        recipe = recipeKey,
-        amount = amount,
-        finishTime = finishTime,
-        fuelUsed = requiredFuel
-    }
-    
-    activeJobs[license] = jobData
-    saveJobToDatabase(license, jobData)
-    
-    -- Send success response
-    TriggerClientEvent('smelter:jobResponse', src, 'started', {
-        recipe = recipeKey,
-        amount = amount,
-        finishTime = finishTime,
-        fuelUsed = requiredFuel
-    })
+    -- IMPORTANT: compute time using skills (server-side)
+    loadSkills(license, function(skillRow)
+        local level, _, _ = getLevelAndThresholdsFromXP(skillRow.xp or 0)
+        
+        -- BASE time for fuel (no efficiency)
+        local baseTotalTime = recipe.baseTime * amount
+        
+        -- Skill-adjusted time
+        local totalTime = getProcessingTimeSeconds(recipe.baseTime, amount, level)
+        
+        -- Fuel calculated from BASE time
+        local requiredFuel = math.ceil(baseTotalTime / Config.Fuel.burnTime)
+        
+        -- Check inventory for materials
+        local materialCount = ox_inventory:Search(src, 'count', recipe.input)
+        if materialCount < amount then
+            TriggerClientEvent('smelter:jobResponse', src, 'error', 'Not enough '..recipe.label..' ore')
+            return
+        end
+        
+        -- Check inventory for fuel
+        local fuelCount = ox_inventory:Search(src, 'count', Config.Fuel.item)
+        if fuelCount < requiredFuel then
+            TriggerClientEvent('smelter:jobResponse', src, 'error', 'Not enough coal (need '..requiredFuel..')')
+            return
+        end
+        
+        -- Remove materials first
+        local materialRemoved = ox_inventory:RemoveItem(src, recipe.input, amount)
+        if not materialRemoved then
+            TriggerClientEvent('smelter:jobResponse', src, 'error', 'Failed to remove materials')
+            return
+        end
+        
+        -- Remove fuel with rollback
+        local fuelRemoved = ox_inventory:RemoveItem(src, Config.Fuel.item, requiredFuel)
+        if not fuelRemoved then
+            -- Rollback material removal
+            ox_inventory:AddItem(src, recipe.input, amount)
+            TriggerClientEvent('smelter:jobResponse', src, 'error', 'Failed to remove fuel')
+            return
+        end
+        
+        -- Create job
+        local finishTime = os.time() + totalTime
+        local jobData = {
+            recipe = recipeKey,
+            amount = amount,
+            finishTime = finishTime,
+            fuelUsed = requiredFuel
+        }
+        
+        activeJobs[license] = jobData
+        saveJobToDatabase(license, jobData)
+        
+        -- Send success response
+        TriggerClientEvent('smelter:jobResponse', src, 'started', {
+            recipe = recipeKey,
+            amount = amount,
+            finishTime = finishTime,
+            fuelUsed = requiredFuel
+        })
+    end)
 end)
 
 RegisterNetEvent('smelter:collectJob', function()
@@ -186,15 +340,21 @@ RegisterNetEvent('smelter:collectJob', function()
     -- Job finished, give items
     ox_inventory:AddItem(src, recipe.output, job.amount)
     
-    -- Clear job
-    activeJobs[license] = nil
-    deleteJobFromDatabase(license)
-    
-    -- Send success response
-    TriggerClientEvent('smelter:jobResponse', src, 'collected', {
-        recipe = job.recipe,
-        amount = job.amount
-    })
+    -- after successful AddItem and before final response:
+    local xpGained = math.floor(job.amount * (recipe.baseTime or 0))
+    local fuelUsed = math.floor(job.fuelUsed or 0)
+
+    upsertSkills(license, xpGained, job.amount, fuelUsed, 1, function(updatedRow)
+        -- Clear job
+        activeJobs[license] = nil
+        deleteJobFromDatabase(license)
+        
+        TriggerClientEvent('smelter:jobResponse', src, 'collected', {
+            recipe = job.recipe,
+            amount = job.amount,
+            skills = buildSkillsPayload(updatedRow)
+        })
+    end)
 end)
 
 -- Clean up license mapping on player disconnect
