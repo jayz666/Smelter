@@ -1,0 +1,8 @@
+-- Add this to your ox_inventory items.lua file
+['coal'] = {
+    label = 'Coal',
+    weight = 1000,
+    stack = true,
+    close = true,
+    description = 'Black coal used for fueling industrial smelters',
+},

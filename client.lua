@@ -43,7 +43,7 @@ RegisterNUICallback('startJob', function(data, cb)
     if recipe and amount and amount >= 1 and amount <= Config.MaxBatch then
         TriggerServerEvent('smelter:startJob', recipe, amount)
     else
-        lib.notify({description = 'Invalid input', type = 'error'})
+        exports.ox_lib:notify({description = 'Invalid input', type = 'error'})
     end
     cb('ok')
 end)
@@ -64,10 +64,10 @@ RegisterNetEvent('smelter:jobResponse', function(status, data)
                 mode = 'active',
                 recipe = data.recipe,
                 amount = data.amount,
-                remaining = data.finishTime - os.time()
+                remaining = data.remaining or 0
             }
         })
-        lib.notify({description = 'Smelting job started!', type = 'success'})
+        exports.ox_lib:notify({description = 'Smelting job started!', type = 'success'})
         
     elseif status == 'waiting' then
         SendNUIMessage({
@@ -79,7 +79,7 @@ RegisterNetEvent('smelter:jobResponse', function(status, data)
                 remaining = data.remaining
             }
         })
-        lib.notify({description = 'Job not ready yet', type = 'info'})
+        exports.ox_lib:notify({description = 'Job not ready yet', type = 'info'})
         
     elseif status == 'collected' then
         hasActiveJob = false
@@ -87,15 +87,13 @@ RegisterNetEvent('smelter:jobResponse', function(status, data)
         SendNUIMessage({
             action = 'state',
             data = {
-                mode = 'ready',
-                recipe = data.recipe,
-                amount = data.amount
+                mode = 'idle'
             }
         })
-        lib.notify({description = 'Collected '..data.amount..' '..recipe.label..' ingots!', type = 'success'})
+        exports.ox_lib:notify({description = 'Collected '..data.amount..' '..recipe.label..' ingots!', type = 'success'})
         
     elseif status == 'error' then
-        lib.notify({description = data, type = 'error'})
+        exports.ox_lib:notify({description = data or 'Unknown error', type = 'error'})
     end
 end)
 

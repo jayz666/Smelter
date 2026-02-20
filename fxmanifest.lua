@@ -1,22 +1,33 @@
 fx_version 'cerulean'
 game 'gta5'
-lua54 'yes'
 
-author 'Smelter Script'
-description 'Minimal standalone smelter script'
+author 'Jayz'
+description 'Standalone FiveM Industrial Smelting System'
 version '1.0.0'
 
+lua54 'yes'
+
+-- Dependencies
 dependencies {
     'ox_lib',
     'ox_inventory',
-    'ox_target'
+    'ox_target',
+    'oxmysql'
 }
 
-shared_script 'config.lua'
+-- Shared scripts
+shared_script '@ox_lib/init.lua'
 
-client_script 'client.lua'
+-- Server scripts
+server_script 'database.lua'
+server_script 'config.lua'
 server_script 'server.lua'
 
+-- Client scripts
+client_script 'config.lua'
+client_script 'client.lua'
+
+-- NUI files
 ui_page 'html/index.html'
 
 files {

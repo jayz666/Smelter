@@ -1,6 +1,11 @@
 local ox_inventory = exports.ox_inventory
 local activeJobs = {}
 local sourceToLicense = {}
+local jobsDirty = false
+local saveTimerActive = false
+
+local JOB_EXPIRY_SECONDS = 604800 -- 7 days
+local SAVE_DEBOUNCE_MS = 2000 -- 2 seconds
 
 -- License extraction utility
 local function getLicense(src)
@@ -12,43 +17,105 @@ local function getLicense(src)
     return nil
 end
 
--- Database functions
-local function loadJobFromDatabase(license, callback)
-    exports.oxmysql:query('SELECT * FROM smelter_jobs WHERE license = ?', {license}, function(result)
-        if result and #result > 0 then
-            local job = result[1]
-            callback({
-                recipe = job.recipe,
-                amount = job.amount,
-                finishTime = job.finishTime,
-                fuelUsed = job.fuelUsed
-            })
-        else
-            callback(nil)
-        end
-    end)
+-- File storage functions
+local function saveToDisk(force)
+    if not jobsDirty and not force then return end
+    
+    print('[Smelter] Attempting to save jobs...')
+    print('[Smelter] Current jobs:', json.encode(activeJobs))
+    
+    local success, jsonData = pcall(json.encode, activeJobs)
+    if not success then
+        -- Failed to encode, don't clear dirty flag
+        print('[Smelter] Failed to encode jobs JSON')
+        return
+    end
+    
+    local saved = SaveResourceFile(GetCurrentResourceName(), "data/jobs.json", jsonData, -1)
+    print('[Smelter] SaveResourceFile result:', saved)
+    
+    if saved then
+        jobsDirty = false
+        print('[Smelter] Jobs saved successfully')
+    else
+        print('[Smelter] Failed to save jobs file')
+    end
+    -- If save failed, keep jobsDirty = true for retry
 end
 
-local function saveJobToDatabase(license, jobData)
-    exports.oxmysql:query('INSERT INTO smelter_jobs (license, recipe, amount, finishTime, fuelUsed) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE recipe = ?, amount = ?, finishTime = ?, fuelUsed = ?', 
-        {license, jobData.recipe, jobData.amount, jobData.finishTime, jobData.fuelUsed, jobData.recipe, jobData.amount, jobData.finishTime, jobData.fuelUsed})
-end
-
-local function deleteJobFromDatabase(license)
-    exports.oxmysql:query('DELETE FROM smelter_jobs WHERE license = ?', {license})
-end
-
--- Load job when player connects
-AddEventHandler('playerConnecting', function()
-    local src = source
-    local license = getLicense(src)
-    if license then
-        sourceToLicense[src] = license
-        loadJobFromDatabase(license, function(jobData)
-            if jobData then
-                activeJobs[license] = jobData
+local function markJobsDirty()
+    jobsDirty = true
+    if not saveTimerActive then
+        saveTimerActive = true
+        SetTimeout(SAVE_DEBOUNCE_MS, function()
+            if jobsDirty then
+                saveToDisk(false)
             end
+            saveTimerActive = false
         end)
+    end
+end
+
+local function loadFromDisk()
+    local data = LoadResourceFile(GetCurrentResourceName(), "data/jobs.json")
+    
+    if not data then
+        activeJobs = {}
+        return
+    end
+    
+    local success, loaded = pcall(json.decode, data)
+    if not success then
+        -- Backup corrupted file
+        local timestamp = os.time()
+        local corruptName = string.format("data/jobs_corrupt_%d.json", timestamp)
+        SaveResourceFile(GetCurrentResourceName(), corruptName, data, -1)
+        activeJobs = {}
+        return
+    end
+    
+    activeJobs = loaded or {}
+    local currentTime = os.time()
+    local modified = false
+    
+    -- Validate and cleanup jobs
+    for license, job in pairs(activeJobs) do
+        -- Validate job structure
+        if not job or not job.recipe or not job.amount or not job.finishTime then
+            activeJobs[license] = nil
+            modified = true
+        elseif not Config.Recipes[job.recipe] then
+            -- Recipe no longer exists
+            activeJobs[license] = nil
+            modified = true
+        elseif job.amount <= 0 or type(job.finishTime) ~= "number" then
+            -- Invalid data
+            activeJobs[license] = nil
+            modified = true
+        elseif currentTime > job.finishTime + JOB_EXPIRY_SECONDS then
+            -- Job expired (finished more than 7 days ago)
+            activeJobs[license] = nil
+            modified = true
+        end
+    end
+    
+    -- Save if we cleaned up invalid jobs
+    if modified then
+        saveToDisk(true)
+    end
+end
+
+-- Initialize on resource start
+AddEventHandler('onResourceStart', function(resourceName)
+    if resourceName == GetCurrentResourceName() then
+        loadFromDisk()
+    end
+end)
+
+-- Save on resource stop
+AddEventHandler('onResourceStop', function(resourceName)
+    if resourceName == GetCurrentResourceName() then
+        saveToDisk(true) -- Force immediate save
     end
 end)
 
@@ -121,15 +188,15 @@ RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
     
     -- Create job
     local finishTime = os.time() + totalTime
-    local jobData = {
+    activeJobs[license] = {
         recipe = recipeKey,
         amount = amount,
         finishTime = finishTime,
         fuelUsed = requiredFuel
     }
     
-    activeJobs[license] = jobData
-    saveJobToDatabase(license, jobData)
+    -- Mark for saving
+    markJobsDirty()
     
     -- Send success response
     TriggerClientEvent('smelter:jobResponse', src, 'started', {
@@ -166,7 +233,7 @@ RegisterNetEvent('smelter:collectJob', function()
     -- Safety guard for recipe
     if not recipe then
         activeJobs[license] = nil
-        deleteJobFromDatabase(license)
+        markJobsDirty()
         TriggerClientEvent('smelter:jobResponse', src, 'error', 'Recipe no longer available')
         return
     end
@@ -187,8 +254,10 @@ RegisterNetEvent('smelter:collectJob', function()
     ox_inventory:AddItem(src, recipe.output, job.amount)
     
     -- Clear job
+    print('[Smelter] Clearing job for license:', license)
     activeJobs[license] = nil
-    deleteJobFromDatabase(license)
+    print('[Smelter] Job cleared, activeJobs count:', #activeJobs)
+    saveToDisk(true) -- Force immediate save on collection
     
     -- Send success response
     TriggerClientEvent('smelter:jobResponse', src, 'collected', {
@@ -203,16 +272,15 @@ AddEventHandler('playerDropped', function()
     sourceToLicense[src] = nil
 end)
 
--- Admin command to clear all jobs from database
-RegisterCommand('smelter_clearall', function(source, args, rawCommand)
+-- Admin command to clear all jobs
+RegisterCommand('smelter_clearjobs', function(source, args, rawCommand)
     if source == 0 or IsPlayerAceAllowed(source, 'command') then
-        exports.oxmysql:query('DELETE FROM smelter_jobs', function()
-            activeJobs = {}
-            print('[Smelter] All jobs cleared from database and memory')
-            if source ~= 0 then
-                TriggerClientEvent('ox_lib:notify', source, {description = 'All smelter jobs cleared', type = 'success'})
-            end
-        end)
+        activeJobs = {}
+        saveToDisk(true)
+        print('[Smelter] All jobs cleared by admin')
+        if source ~= 0 then
+            TriggerClientEvent('ox_lib:notify', source, {description = 'All smelter jobs cleared', type = 'success'})
+        end
     else
         TriggerClientEvent('ox_lib:notify', source, {description = 'No permission', type = 'error'})
     end
