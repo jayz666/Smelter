@@ -50,11 +50,16 @@ Config.Recipes = {
     }
     -- Add more recipes as needed
 }
+
+## 🗄️ Database Persistence
+
+Active smelting jobs are automatically saved to MySQL database and restored on server restart. The system uses license-based storage with automatic cleanup and recovery mechanisms.
+
+### Database Schema
+```sql
+-- Import sql/smelter_jobs.sql
+-- Import sql/smelter_skills.sql
 ```
-
-## Persistence
-
-Active smelting jobs are automatically saved to `data/jobs.json` and restored on server restart. The file is created automatically and includes corruption recovery mechanisms.
 
 ## Security Features
 

@@ -91,29 +91,14 @@ Config.Fuel = {
 - Level 9: 2200 XP
 - Level 10: 2700 XP
 
-## 🗄️ Database Schema
+## 🗄️ Database Persistence
 
-### Jobs Table
-```sql
-CREATE TABLE IF NOT EXISTS smelter_jobs (
-    license VARCHAR(50) PRIMARY KEY,
-    recipe VARCHAR(50) NOT NULL,
-    amount INT NOT NULL,
-    finishTime INT NOT NULL,
-    fuelUsed INT NOT NULL,
-    createdAt INT DEFAULT UNIX_TIMESTAMP()
-);
-```
+Active smelting jobs are automatically saved to MySQL database and restored on server restart. The system uses license-based storage with automatic cleanup and recovery mechanisms.
 
-### Skills Table  
+### Database Schema
 ```sql
-CREATE TABLE IF NOT EXISTS smelter_skills (
-    license VARCHAR(60) PRIMARY KEY,
-    xp INT NOT NULL DEFAULT 0,
-    total_items_smelted INT NOT NULL DEFAULT 0,
-    total_fuel_used INT NOT NULL DEFAULT 0,
-    total_jobs_completed INT NOT NULL DEFAULT 0
-);
+-- Import sql/smelter_jobs.sql
+-- Import sql/smelter_skills.sql
 ```
 
 ## 🔧 Troubleshooting
