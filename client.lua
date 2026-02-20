@@ -44,7 +44,7 @@ RegisterNUICallback('startJob', function(data, cb)
     if recipe and amount and amount >= 1 and amount <= Config.MaxBatch then
         TriggerServerEvent('smelter:startJob', recipe, amount, heatChoice, holdMode)
     else
-        ox_lib.notify({description = 'Invalid input', type = 'error'})
+        exports.ox_lib:notify({description = 'Invalid input', type = 'error'})
     end
 
     cb('ok')
@@ -89,12 +89,12 @@ RegisterNetEvent('smelter:jobResponse', function(status, data)
         local q = data.qualityTier or 'basic'
 
         if data.isSlag == 1 then
-            ox_lib.notify({
+            exports.ox_lib:notify({
                 description = ('Smelting failed heat check. You received %dx %s.'):format(data.outputAmount or 1, data.outputItem or 'slag'),
                 type = 'error'
             })
         else
-            ox_lib.notify({
+            exports.ox_lib:notify({
                 description = ('Collected %dx %s (%s quality)'):format(data.outputAmount or data.amount or 1, recipe.output, q),
                 type = 'success'
             })
