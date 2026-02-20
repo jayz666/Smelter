@@ -5,6 +5,54 @@ All notable changes to the FiveM Smelter System will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-02-20
+
+### Added
+- **Heat Control System**: Complete heat management with Low/Medium/High choices
+- **Hold Mode Bonus**: Boolean bonus system for optimal heat (no client timing trust)
+- **Quality Tiers**: Basic/Standard/Premium/Master with conservative multipliers
+- **Slag Failure System**: Predictable failure with 50% output on big miss
+- **Quality Preview UI**: Real-time expected quality display
+- **Heat Selection Interface**: Interactive buttons and hold mode checkbox
+
+### Features
+- **Server-Authoritative Quality**: All calculations server-side, no client trust
+- **Distance-Based Heat Model**: Clear diff calculation (0/1/2) for predictable outcomes
+- **Skills-Based Tolerance**: Time Level 4 + Fuel Level 4 affects heat tolerance
+- **Conservative Multipliers**: 1.00/1.05/1.10/1.15 to prevent economic inflation
+- **Clean Economic Impact**: Max 15% additional output, balanced progression
+
+### Security
+- **No Client Timing**: Hold mode is boolean only, prevents timing exploits
+- **Input Sanitization**: All heat choices validated server-side
+- **Defensive Caps**: Maximum quality limits enforced
+- **Parameterized Queries**: Database security maintained
+
+### Database Changes
+- **Complete Schema**: Both tables created with all Tier 3 columns
+- **MySQL Compatibility**: Proper column creation without IF NOT EXISTS
+- **Migration Support**: Manual SQL provided for existing installations
+- **Backward Compatibility**: Existing data preserved
+
+### UI Enhancements
+- **Heat Control Section**: New dedicated section for heat management
+- **Interactive Buttons**: Low/Medium/High selection with active states
+- **Hold Mode Checkbox**: Bonus option for optimal heat
+- **Quality Preview**: Expected quality and multiplier display
+- **Optimal Heat Display**: Shows recipe's optimal heat setting
+
+### Economic Impact
+- **Controlled Expansion**: 15% max additional output prevents inflation
+- **Risk Management**: Predictable failure with 50% slag output
+- **Player Choice**: Meaningful heat control decisions
+- **Resource Stability**: Conservative scaling preserves economy
+
+### Integration
+- **Clean Boundaries**: Heat affects quality only, no crossover with existing skills
+- **Progression Compatibility**: Works with existing Time and Fuel skill systems
+- **UI Consistency**: Maintains CEF-safe styling and drag functionality
+- **Performance**: Minimal overhead, efficient calculations
+
 ## [2.0.0] - 2026-02-20
 
 ### Added
@@ -99,6 +147,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Tier 3: Heat mechanics and quality tiers
 - Tier 4: Furnace ownership and multi-node processing
 - Advanced economic features and market integration
+- Heat mechanics and quality tiers (COMPLETED in v3.0.0)
+- Fuel efficiency progression branch (COMPLETED in v2.0.0)
