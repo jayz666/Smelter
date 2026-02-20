@@ -203,6 +203,41 @@ AddEventHandler('playerDropped', function()
     sourceToLicense[src] = nil
 end)
 
+-- Status request event
+RegisterNetEvent('smelter:requestStatus', function()
+    local src = source
+    local license = sourceToLicense[src]
+    
+    if not license then
+        license = getLicense(src)
+        sourceToLicense[src] = license
+    end
+    
+    if license and activeJobs[license] then
+        local job = activeJobs[license]
+        local recipe = Config.Recipes[job.recipe]
+        local currentTime = os.time()
+        
+        if currentTime >= job.finishTime then
+            -- Job is ready
+            TriggerClientEvent('smelter:jobResponse', src, 'collected', {
+                recipe = job.recipe,
+                amount = job.amount
+            })
+        else
+            -- Job still active
+            TriggerClientEvent('smelter:jobResponse', src, 'active', {
+                recipe = job.recipe,
+                amount = job.amount,
+                remaining = job.finishTime - currentTime
+            })
+        end
+    else
+        -- No active job
+        TriggerClientEvent('smelter:jobResponse', src, 'idle')
+    end
+end)
+
 -- Admin command to clear all jobs from database
 RegisterCommand('smelter_clearall', function(source, args, rawCommand)
     if source == 0 or IsPlayerAceAllowed(source, 'command') then

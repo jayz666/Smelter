@@ -142,8 +142,37 @@ function showActiveState(recipeKey, amount, remaining) {
     
     if (recipe) {
         const processingText = `Smelting ${amount} ${recipe.input.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} → ${amount} ${recipe.output.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}`;
-        const timeText = typeof remaining === 'number' ? formatTime(remaining) : 'Calculating...';
         
+        // Clear any existing timer
+        if (updateInterval) {
+            clearInterval(updateInterval);
+        }
+        
+        // Start live countdown
+        updateInterval = setInterval(() => {
+            if (remaining > 0) {
+                remaining--;
+                const timeText = formatTime(remaining);
+                statusBox.innerHTML = `
+                    <div>${processingText}</div>
+                    <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">Time remaining: ${timeText}</div>
+                `;
+            } else {
+                clearInterval(updateInterval);
+                updateInterval = null;
+                // Auto-refresh to check if job is ready
+                fetch(`https://${GetParentResourceName()}/requestStatus`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json; charset=UTF-8',
+                    },
+                    body: JSON.stringify({})
+                });
+            }
+        }, 1000);
+        
+        // Initial display
+        const timeText = typeof remaining === 'number' ? formatTime(remaining) : 'Calculating...';
         statusBox.innerHTML = `
             <div>${processingText}</div>
             <div style="font-size: 12px; opacity: 0.8; margin-top: 4px;">Time remaining: ${timeText}</div>
