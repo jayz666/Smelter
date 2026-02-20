@@ -38,12 +38,15 @@ end)
 RegisterNUICallback('startJob', function(data, cb)
     local recipe = data.recipe
     local amount = tonumber(data.amount)
-    
+    local heatChoice = data.heatChoice
+    local holdMode = data.holdMode
+
     if recipe and amount and amount >= 1 and amount <= Config.MaxBatch then
-        TriggerServerEvent('smelter:startJob', recipe, amount)
+        TriggerServerEvent('smelter:startJob', recipe, amount, heatChoice, holdMode)
     else
-        exports.ox_lib:notify({description = 'Invalid input', type = 'error'})
+        ox_lib.notify({description = 'Invalid input', type = 'error'})
     end
+
     cb('ok')
 end)
 
@@ -83,17 +86,32 @@ RegisterNetEvent('smelter:jobResponse', function(status, data)
     elseif status == 'collected' then
         hasActiveJob = false
         local recipe = Config.Recipes[data.recipe]
+        local q = data.qualityTier or 'basic'
+
+        if data.isSlag == 1 then
+            ox_lib.notify({
+                description = ('Smelting failed heat check. You received %dx %s.'):format(data.outputAmount or 1, data.outputItem or 'slag'),
+                type = 'error'
+            })
+        else
+            ox_lib.notify({
+                description = ('Collected %dx %s (%s quality)'):format(data.outputAmount or data.amount or 1, recipe.output, q),
+                type = 'success'
+            })
+        end
+
         SendNUIMessage({
             action = 'state',
             data = {
                 mode = 'idle'
             }
         })
-        exports.ox_lib:notify({description = 'Collected '..data.amount..' '..recipe.label..' ingots!', type = 'success'})
-        
-        -- Forward skills data to NUI
+
         if data.skills then
-            SendNUIMessage({ action = 'skills', data = data.skills })
+            SendNUIMessage({
+                action = 'skills',
+                data = data.skills
+            })
         end
         
     elseif status == 'error' then

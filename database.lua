@@ -6,6 +6,10 @@ exports.oxmysql:ready(function()
         amount INT NOT NULL,
         finishTime INT NOT NULL,
         fuelUsed INT NOT NULL,
+        heat_choice VARCHAR(10) DEFAULT 'medium',
+        hold_mode TINYINT(1) DEFAULT 0,
+        quality_tier VARCHAR(10) DEFAULT 'basic',
+        is_slag TINYINT(1) DEFAULT 0,
         createdAt INT DEFAULT UNIX_TIMESTAMP()
     )]], {}, function(success)
         if success then
@@ -15,24 +19,12 @@ exports.oxmysql:ready(function()
         end
     end)
     
-    -- Tier 1 skills table - simplified syntax
-    exports.oxmysql:query('CREATE TABLE IF NOT EXISTS smelter_skills (license VARCHAR(60) PRIMARY KEY, xp INT NOT NULL DEFAULT 0, total_items_smelted INT NOT NULL DEFAULT 0, total_fuel_used INT NOT NULL DEFAULT 0, total_jobs_completed INT NOT NULL DEFAULT 0)', {}, function(success)
+    -- Tier 1 skills table - simplified syntax with fuel_xp included
+    exports.oxmysql:query('CREATE TABLE IF NOT EXISTS smelter_skills (license VARCHAR(60) PRIMARY KEY, xp INT NOT NULL DEFAULT 0, fuel_xp INT NOT NULL DEFAULT 0, total_items_smelted INT NOT NULL DEFAULT 0, total_fuel_used INT NOT NULL DEFAULT 0, total_jobs_completed INT NOT NULL DEFAULT 0)', {}, function(success)
         if success then
             print('[Smelter] Skills table ready')
         else
             print('[Smelter] Failed to create skills table')
-        end
-    end)
-    
-    -- Tier 2: Add fuel_xp column if not exists
-    exports.oxmysql:query([[
-        ALTER TABLE smelter_skills 
-        ADD COLUMN IF NOT EXISTS fuel_xp INT NOT NULL DEFAULT 0
-    ]], {}, function(success)
-        if success then
-            print('[Smelter] Fuel XP column ready')
-        else
-            print('[Smelter] Fuel XP column already exists or failed')
         end
     end)
 end)

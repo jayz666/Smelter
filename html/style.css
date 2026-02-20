@@ -141,6 +141,60 @@ html, body {
   opacity: 0.7;
 }
 
+/* Heat Controls */
+.heat-section {
+  margin-top: 14px;
+}
+
+.heat-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.heat-btn {
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  transition: background 0.2s ease; /* CEF-safe */
+  font-size: 13px;
+}
+
+.heat-btn.active {
+  background: rgba(255,107,53,0.30);
+  border-color: rgba(255,107,53,0.55);
+}
+
+.hold-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.hold-control input {
+  width: auto;
+}
+
+.optimal-heat {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.quality-preview {
+  margin-top: 4px;
+  font-size: 12px;
+  color: rgba(255,107,53,0.95);
+  opacity: 0.95;
+}
+
 /* Sections */
 .section {
     margin-bottom: 18px;

@@ -63,6 +63,67 @@ local function getFuelLevelAndThresholdsFromXP(fuelXp, timeLevel)
     return level, prev, next
 end
 
+-- Tier 3 Heat helpers
+local HEAT_MAP = { low = 0, medium = 1, high = 2 }
+
+local function sanitizeHeatChoice(choice)
+    if type(choice) ~= 'string' then return 'medium' end
+    choice = choice:lower()
+    if HEAT_MAP[choice] == nil then return 'medium' end
+    return choice
+end
+
+local function sanitizeHoldMode(val)
+    -- accepts boolean/number/string
+    if val == true then return 1 end
+    local n = tonumber(val)
+    if n and n >= 1 then return 1 end
+    return 0
+end
+
+local function getHeatTolerance(timeLevel, fuelLevel)
+    local tol = 0
+    if (tonumber(timeLevel) or 1) >= 4 then tol = tol + 1 end
+    if (tonumber(fuelLevel) or 1) >= 4 then tol = tol + 1 end
+    return math.min(tol, 2)
+end
+
+local function calculateQuality(recipe, heatChoice, holdMode, timeLevel, fuelLevel)
+    -- recipe fields w/ safe defaults
+    local optimal = sanitizeHeatChoice(recipe.optimalHeat or 'medium')
+    local difficulty = math.floor(tonumber(recipe.heatDifficulty) or 2)
+    if difficulty < 1 then difficulty = 1 end
+    if difficulty > 3 then difficulty = 3 end
+
+    heatChoice = sanitizeHeatChoice(heatChoice)
+    holdMode = sanitizeHoldMode(holdMode)
+
+    local diff = math.abs((HEAT_MAP[heatChoice] or 1) - (HEAT_MAP[optimal] or 1))
+    local tolerance = getHeatTolerance(timeLevel, fuelLevel)
+
+    local isSlag = 0
+    local tier = 'basic'
+
+    if diff == 0 then
+        tier = 'premium'
+        if holdMode == 1 then
+            tier = 'master'
+        end
+    elseif diff == 1 then
+        tier = 'standard'
+    else
+        -- diff == 2
+        if tolerance < difficulty then
+            isSlag = 1
+            tier = 'basic' -- tier still set, but ignored if slag
+        else
+            tier = 'basic'
+        end
+    end
+
+    return tier, isSlag, optimal, diff, tolerance, difficulty
+end
+
 local function loadSkills(license, cb)
     if skillsCache[license] then
         cb(skillsCache[license])
@@ -203,7 +264,11 @@ local function loadJobFromDatabase(license, callback)
                 recipe = job.recipe,
                 amount = job.amount,
                 finishTime = job.finishTime,
-                fuelUsed = job.fuelUsed
+                fuelUsed = job.fuelUsed,
+                heatChoice = job.heat_choice,
+                holdMode = job.hold_mode,
+                qualityTier = job.quality_tier,
+                isSlag = job.is_slag
             })
         else
             callback(nil)
@@ -211,9 +276,30 @@ local function loadJobFromDatabase(license, callback)
     end)
 end
 
-local function saveJobToDatabase(license, jobData)
-    exports.oxmysql:query('INSERT INTO smelter_jobs (license, recipe, amount, finishTime, fuelUsed) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE recipe = ?, amount = ?, finishTime = ?, fuelUsed = ?', 
-        {license, jobData.recipe, jobData.amount, jobData.finishTime, jobData.fuelUsed, jobData.recipe, jobData.amount, jobData.finishTime, jobData.fuelUsed})
+local function saveJobToDatabase(license, job)
+    exports.oxmysql:query([[
+        INSERT INTO smelter_jobs (license, recipe, amount, finishTime, fuelUsed, heat_choice, hold_mode, quality_tier, is_slag, createdAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UNIX_TIMESTAMP())
+        ON DUPLICATE KEY UPDATE
+            recipe = VALUES(recipe),
+            amount = VALUES(amount),
+            finishTime = VALUES(finishTime),
+            fuelUsed = VALUES(fuelUsed),
+            heat_choice = VALUES(heat_choice),
+            hold_mode = VALUES(hold_mode),
+            quality_tier = VALUES(quality_tier),
+            is_slag = VALUES(is_slag)
+    ]], {
+        license,
+        job.recipe,
+        job.amount,
+        job.finishTime,
+        job.fuelUsed,
+        job.heatChoice or 'medium',
+        tonumber(job.holdMode) or 0,
+        job.qualityTier or 'basic',
+        tonumber(job.isSlag) or 0
+    })
 end
 
 local function deleteJobFromDatabase(license)
@@ -245,7 +331,7 @@ RegisterNetEvent("smelter:requestSkills", function()
     end)
 end)
 
-RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
+RegisterNetEvent('smelter:startJob', function(recipeKey, amount, heatChoice, holdMode)
     local src = source
     
     -- Get player license
@@ -265,18 +351,15 @@ RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
         return
     end
     
-    -- Validate amount
-    amount = math.floor(tonumber(amount) or 0)
-    if amount < 1 or amount > Config.MaxBatch then
-        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Invalid amount')
+    -- Validate inputs
+    if not recipeKey or not amount or amount < 1 or amount > Config.MaxBatch then
+        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Invalid recipe or amount')
         return
     end
     
-    -- Check if player already has active job
-    if activeJobs[license] then
-        TriggerClientEvent('smelter:jobResponse', src, 'error', 'Already have active job')
-        return
-    end
+    -- Tier 3: Validate heat choice and hold mode
+    heatChoice = sanitizeHeatChoice(heatChoice)
+    holdMode = sanitizeHoldMode(holdMode)
     
     -- IMPORTANT: compute time using skills (server-side)
     loadSkills(license, function(skillRow)
@@ -330,7 +413,13 @@ RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
             recipe = recipeKey,
             amount = amount,
             finishTime = finishTime,
-            fuelUsed = requiredFuel
+            fuelUsed = requiredFuel,
+            
+            -- Tier 3
+            heatChoice = heatChoice,
+            holdMode = holdMode,
+            qualityTier = 'basic',
+            isSlag = 0
         }
         
         activeJobs[license] = jobData
@@ -341,7 +430,11 @@ RegisterNetEvent('smelter:startJob', function(recipeKey, amount)
             recipe = recipeKey,
             amount = amount,
             finishTime = finishTime,
-            fuelUsed = requiredFuel
+            fuelUsed = requiredFuel,
+            
+            -- Tier 3
+            heatChoice = heatChoice,
+            holdMode = holdMode
         })
     end)
 end)
@@ -389,9 +482,6 @@ RegisterNetEvent('smelter:collectJob', function()
         return
     end
     
-    -- Job finished, give items
-    ox_inventory:AddItem(src, recipe.output, job.amount)
-    
     -- Load current skills to check unlock status
     loadSkills(license, function(skillRow)
         -- Calculate XP awards
@@ -400,9 +490,31 @@ RegisterNetEvent('smelter:collectJob', function()
         
         -- Check if fuel efficiency is unlocked (time level >= 5)
         local timeLevel, _, _ = getLevelAndThresholdsFromXP(skillRow.xp or 0)
+        local fuelLevel, _, _ = getFuelLevelAndThresholdsFromXP(skillRow.fuel_xp or 0, timeLevel)
         if timeLevel < 5 then
             fuelXpGained = 0 -- Fuel XP locked until time level 5
         end
+
+        -- Tier 3: Calculate quality
+        local qualityTier, isSlag = calculateQuality(recipe, job.heatChoice, job.holdMode, timeLevel, fuelLevel)
+        
+        -- Update job with quality results
+        job.qualityTier = qualityTier
+        job.isSlag = isSlag
+        
+        -- Calculate output based on quality
+        local outputItem, outputAmount
+        if isSlag == 1 then
+            outputItem = recipe.slagItem or 'slag'
+            outputAmount = math.max(1, math.ceil(job.amount * 0.5))
+        else
+            local mult = (Config.QualityMultipliers and Config.QualityMultipliers[qualityTier]) or 1.0
+            outputItem = recipe.output
+            outputAmount = math.max(1, math.ceil(job.amount * mult))
+        end
+
+        -- Give output
+        ox_inventory:AddItem(src, outputItem, outputAmount)
 
         upsertSkills(license, timeXpGained, fuelXpGained, job.amount, job.fuelUsed, 1, function(updatedRow)
             -- Clear job
@@ -412,6 +524,14 @@ RegisterNetEvent('smelter:collectJob', function()
             TriggerClientEvent('smelter:jobResponse', src, 'collected', {
                 recipe = job.recipe,
                 amount = job.amount,
+                
+                -- Tier 3 result
+                qualityTier = qualityTier,
+                isSlag = isSlag,
+                outputItem = outputItem,
+                outputAmount = outputAmount,
+                
+                -- skills payload
                 skills = buildSkillsPayload(updatedRow)
             })
         end)

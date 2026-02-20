@@ -48,14 +48,34 @@
         <div class="section" id="recipeSection">
             <div class="section-title">Recipe</div>
             <select id="recipeSelect">
-                <option value="">Loading...</option>
+                <option value="">Select a recipe...</option>
             </select>
-            <div class="recipe-info" id="recipeInfo">
-                <div class="recipe-flow">
-                    <span class="input-item" id="inputItemName">-</span>
-                    <span class="arrow">→</span>
-                    <span class="output-item" id="outputItemName">-</span>
-                </div>
+        </div>
+
+        <!-- Heat Control -->
+        <div class="section heat-section" id="heatSection">
+            <div class="section-title">HEAT CONTROL</div>
+
+            <div class="heat-buttons">
+                <button class="heat-btn" data-heat="low" type="button">Low</button>
+                <button class="heat-btn active" data-heat="medium" type="button">Medium</button>
+                <button class="heat-btn" data-heat="high" type="button">High</button>
+            </div>
+
+            <label class="hold-control">
+                <input type="checkbox" id="holdMode" />
+                Hold Heat (bonus if optimal)
+            </label>
+
+            <div id="optimalHeatText" class="optimal-heat">Optimal: Medium</div>
+            <div id="qualityPreview" class="quality-preview">Expected: Premium (1.10x)</div>
+        </div>
+
+        <div class="recipe-info" id="recipeInfo">
+            <div class="recipe-flow">
+                <span class="input-item" id="inputItemName">-</span>
+                <span class="arrow">→</span>
+                <span class="output-item" id="outputItemName">-</span>
             </div>
         </div>
 

@@ -3,10 +3,13 @@ let updateInterval = null;
 let availableRecipes = {};
 let fuelConfig = {};
 let maxBatch = 20;
-
-// Drag functionality
+let activeJob = null;
 let isDragging = false;
 let dragOffset = { x: 0, y: 0 };
+
+// Tier 3: Heat selection
+let selectedHeat = 'medium';
+let holdMode = false;
 
 // Initialize drag functionality
 document.addEventListener('DOMContentLoaded', function() {
@@ -23,7 +26,76 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize tab functionality
     initializeTabs();
+    
+    // Initialize heat controls
+    initializeHeatControls();
 });
+
+function initializeHeatControls() {
+    // Heat button clicks
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.heat-btn');
+        if (!btn) return;
+        setHeatChoice(btn.dataset.heat);
+    });
+
+    // Hold mode checkbox
+    const holdEl = document.getElementById('holdMode');
+    if (holdEl) {
+        holdEl.addEventListener('change', (e) => {
+            holdMode = !!e.target.checked;
+            updateHeatPreview();
+        });
+    }
+}
+
+function setHeatChoice(heat) {
+    selectedHeat = heat;
+
+    document.querySelectorAll('.heat-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.heat === heat);
+    });
+
+    updateHeatPreview();
+}
+
+function getHeatDisplay(heat) {
+    if (!heat) return 'Medium';
+    return heat.charAt(0).toUpperCase() + heat.slice(1);
+}
+
+function updateHeatPreview() {
+    const recipeKey = document.getElementById('recipeSelect')?.value;
+    const recipe = availableRecipes?.[recipeKey];
+
+    const optimal = recipe?.optimalHeat || 'medium';
+    const optimalText = document.getElementById('optimalHeatText');
+    const preview = document.getElementById('qualityPreview');
+
+    if (optimalText) optimalText.textContent = `Optimal: ${getHeatDisplay(optimal)}`;
+
+    // Preview is purely UX; server is authority.
+    // Use the same distance model visually:
+    const map = { low: 0, medium: 1, high: 2 };
+    const diff = Math.abs((map[selectedHeat] ?? 1) - (map[optimal] ?? 1));
+
+    let tier = 'Basic';
+    let mult = 1.00;
+
+    if (diff === 0) {
+        tier = holdMode ? 'Master' : 'Premium';
+        mult = holdMode ? 1.15 : 1.10;
+    } else if (diff === 1) {
+        tier = 'Standard';
+        mult = 1.05;
+    } else {
+        // Could be slag depending on tolerance/difficulty (server decides)
+        tier = 'Basic (risk of Slag)';
+        mult = 1.00;
+    }
+
+    if (preview) preview.textContent = `Expected: ${tier} (${mult.toFixed(2)}x)`;
+}
 
 function initializeTabs() {
     const timeTab = document.getElementById('timeTab');
@@ -118,6 +190,13 @@ window.addEventListener('message', function(event) {
             uiElement.style.top = '50%';
             uiElement.style.transform = 'translateY(-50%)';
             uiElement.style.transition = 'transform 0.2s ease';
+
+            // Tier 3: Reset heat defaults
+            selectedHeat = 'medium';
+            holdMode = false;
+            const holdEl = document.getElementById('holdMode');
+            if (holdEl) holdEl.checked = false;
+            setHeatChoice('medium');
 
             populateRecipeDropdown();
             showIdleState();
@@ -271,7 +350,14 @@ function populateRecipeDropdown() {
     
     updateRecipeInfo();
     updateFuelRequirement();
+    updateHeatPreview();
 }
+
+// Recipe selection change
+document.getElementById('recipeSelect').addEventListener('change', function() {
+    updateRecipeInfo();
+    updateHeatPreview();
+});
 
 function updateRecipeInfo() {
     const select = document.getElementById('recipeSelect');
@@ -447,7 +533,12 @@ document.getElementById('startBtn').addEventListener('click', function() {
             headers: {
                 'Content-Type': 'application/json; charset=UTF-8',
             },
-            body: JSON.stringify({ recipe: recipe, amount: amount })
+            body: JSON.stringify({
+                recipe: recipe, 
+                amount: amount,
+                heatChoice: selectedHeat,
+                holdMode: holdMode ? 1 : 0
+            })
         });
     } else {
         showErrorState(`Invalid input (1-${maxBatch})`);
@@ -464,15 +555,58 @@ document.getElementById('collectBtn').addEventListener('click', function() {
     });
 });
 
-// Input change handlers
-document.getElementById('recipeSelect').addEventListener('change', function() {
-    updateRecipeInfo();
-    updateFuelRequirement();
+function showErrorState(message) {
+    const statusBox = document.getElementById('statusBox');
+    statusBox.className = 'status error';
+    statusBox.innerHTML = message || 'An error occurred';
+    
+    // Return to idle after 3 seconds
+    setTimeout(() => {
+        if (currentState === 'error') {
+            handleStateUpdate({ mode: 'idle' });
+        }
+    }, 3000);
+}
+
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Button handlers
+document.getElementById('startBtn').addEventListener('click', function() {
+    const recipe = document.getElementById('recipeSelect').value;
+    const amount = parseInt(document.getElementById('amountInput').value);
+    
+    if (recipe && amount >= 1 && amount <= maxBatch) {
+        fetch(`https://${GetParentResourceName()}/startJob`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: JSON.stringify({
+                recipe: recipe, 
+                amount: amount,
+                heatChoice: selectedHeat,
+                holdMode: holdMode ? 1 : 0
+            })
+        });
+    } else {
+        showErrorState(`Invalid input (1-${maxBatch})`);
+    }
 });
 
-document.getElementById('amountInput').addEventListener('input', updateFuelRequirement);
+document.getElementById('collectBtn').addEventListener('click', function() {
+    fetch(`https://${GetParentResourceName()}/collectJob`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: JSON.stringify({})
+    });
+});
 
-// Escape key handler
 document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         fetch(`https://${GetParentResourceName()}/closeUI`, {
